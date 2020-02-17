@@ -262,10 +262,12 @@ class zontdevices extends module
 
         $username=$this->config['API_USERNAME'];
         $password=$this->config['API_PASSWORD'];
-
+	$data = array('load_io' => true);
         $ch = curl_init('https://zont-online.ru'.$command);
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
         if (is_array($data)) {
+//	dprint($data);
+
             $data_string = json_encode($data);
             curl_setopt($ch, CURLOPT_POSTFIELDS, $data_string);
         } else {
@@ -274,6 +276,8 @@ class zontdevices extends module
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);     // bad style, I know...
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+	curl_setopt($ch, CURLOPT_CONNECTTIMEOUT,0);
+	curl_setopt($ch, CURLOPT_TIMEOUT,400);
         curl_setopt($ch, CURLOPT_HTTPHEADER, array(
                 'X-ZONT-Client: '.$username,
                 'Content-Type: application/json',
@@ -284,15 +288,54 @@ class zontdevices extends module
         $result = curl_exec($ch);
 
         if (curl_errno($ch) && !$background) {
-            //$errorInfo = curl_error($ch);
+            $errorInfo = curl_error($ch);
             $info = curl_getinfo($ch);
             dprint($info,false);
         }
         curl_close($ch);
         $res=json_decode($result,true);
         return $res;
-
     }
+
+    function writeZontAPI($command,$data=0) {
+
+        $username=$this->config['API_USERNAME'];
+        $password=$this->config['API_PASSWORD'];
+        $ch = curl_init('https://zont-online.ru'.$command);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
+        if (is_array($data)) {
+//	dprint($data);
+
+            $data_string = json_encode($data);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $data_string);
+        } else {
+            $data_string='';
+        }
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);     // bad style, I know...
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+	curl_setopt($ch, CURLOPT_CONNECTTIMEOUT,0);
+	curl_setopt($ch, CURLOPT_TIMEOUT,400);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+                'X-ZONT-Client: '.$username,
+                'Content-Type: application/json',
+                'Content-Length: ' . strlen($data_string))
+        );
+        curl_setopt($ch, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
+        curl_setopt($ch, CURLOPT_USERPWD, $username . ":" . $password);
+        $result = curl_exec($ch);
+
+        if (curl_errno($ch) && !$background) {
+            $errorInfo = curl_error($ch);
+            $info = curl_getinfo($ch);
+            dprint($info,false);
+        }
+        curl_close($ch);
+        $res=json_decode($result,true);
+//	dprint($res);
+        return $res;
+    }
+
 
 
     function processDeviceDataResponse($data) {
@@ -338,7 +381,7 @@ class zontdevices extends module
     }
 
     function processDeviceData($data) {
-        //dprint($data);
+//        dprint($data);
         $device_rec=SQLSelectOne("SELECT * FROM zontdevices WHERE SERIAL_ID='".DBSafe($data['id'])."'");
         if (!$device_rec['ID']) {
             $device_rec['SERIAL_ID']=$data['id'];
@@ -352,11 +395,127 @@ class zontdevices extends module
         foreach($data['capabilities'] as $feature) {
             $has[$feature]=1;
         }
+//@kirush
+//Общая информация об устройстве
+        if ($has['has_z3k_settings'] && is_array($data['z3k_config']['device'])) {
+            foreach($data['z3k_config']['device'] as $device_info => $val) {
+            $command=array();
+            $command['SYSTEM']=$device_info;
+            $command['VALUE']=$val;
+            $commands[]=$command;
+            }
+        }
+
+// Баланс
         if ($has['has_gsm_balance'] && is_array($data['balance'])) {
             $command=array();
-            $command['SYSTEM']='gsm_balance';
+            $command['SYSTEM']='balance';
+            $command['TITLE']='Баланс';
             $command['VALUE']=$data['balance']['value'];
             $commands[]=$command;
+        }
+
+// Данные с проводных датчиков
+        if ($has['has_multiple_thermometers'] && is_array($data['z3k_config']['wired_temperature_sensors'])) {
+            foreach($data['z3k_config']['wired_temperature_sensors'] as $wired_term) {
+                $command=array();
+                $serial=str_replace('%','',$wired_term['serial']);
+                $id=$wired_term['id'];
+		$command['SYSTEM']=$serial.'_value';
+                $command['TITLE']=$wired_term['name'].', °C';
+                $command['VALUE']=$data['io']['z3k-state'][$id]['curr_temp'];
+                $command['VALUE_TYPE']='temperature';
+                $commands[]=$command;
+            }
+        }
+
+// Контуры отопления
+        if ($has['has_z3k_settings'] && is_array($data['z3k_config']['heating_circuits'])) {
+            foreach($data['z3k_config']['heating_circuits'] as $heating_circ) {
+	        $command=array();
+                $id=$heating_circ['id'];
+		$command['SYSTEM']=$heating_circ['id'];
+		$command['TITLE']="Целевая t ".$heating_circ['name'];
+                $command['VALUE']=$data['io']['z3k-state'][$id]['target_temp'];
+                $command['VALUE_TYPE']='temperature';
+                $commands[]=$command;
+            }
+        }
+	
+// Насосы
+        if ($has['has_z3k_settings'] && is_array($data['z3k_config']['pumps'])) {
+            foreach($data['z3k_config']['pumps'] as $pumps) {
+	        $command=array();
+                $id=$pumps['id'];
+		$command['SYSTEM']="nasos_".$pumps['id'];
+		$command['TITLE']=$pumps['name'];
+		$command['VALUE']=$data['io']['z3k-state'][$id]['run']; 
+                $commands[]=$command;
+	    }
+        }
+
+// Статус горелки
+        if ($has['has_z3k_settings'] && is_array($data['z3k_config']['heating_circuits'])) {
+            foreach($data['z3k_config']['heating_circuits'] as $h_circuits) {
+	        $command=array();
+		if ($h_circuits['type']=='0') {	
+                $id=$h_circuits['id'];
+		$command['SYSTEM']='Burner';
+		$command['TITLE']=$h_circuits['name'];
+		$command['VALUE']=$data['io']['z3k-state'][$id]['status']; 
+                $commands[]=$command;
+	    }
+        }
+    }
+
+// Режимы работы
+//        if ($has['has_z3k_settings'] && is_array($data['z3k_config']['heating_modes'])) {
+//            foreach($data['z3k_config']['heating_modes'] as $h_modes) {
+//	        $command=array();
+//                $id=$h_modes['id'];
+//		$command['SYSTEM']='Режим работы';
+//		$command['TITLE']=$h_modes['name'];
+//		$command['VALUE']=$data['io']['z3k-state'][$id]['heating_circuit']; 
+//                $commands[]=$command;
+//        }
+//    }
+
+// Идентификатор режима отопления ручной или какой либо режим, если 0 то ручной.  
+//        if ($has['has_z3k_settings'] && is_array($data['z3k_config']['heating_circuits'])) {
+//	    foreach($data['z3k_config']['heating_circuits'] as $heating_circ) {
+//	    $command=array();
+//	    $id=$heating_circ['id']; //8201 котел
+//	    $command['SYSTEM']=$heating_circ['id']."_режим работы";
+//	    $command['TITLE']=$heating_circ['name'];
+//
+//	    foreach($data['io']['z3k-state'][$id] as $massive) {
+//	    $mode_id=$massive['mode_id']; //0
+//	    dprint($mode_id);
+//}
+//}
+//	    foreach($data['z3k_config']['heating_modes'] as $heating_modes => $val) {
+//	    printf($heating_modes);
+//	    dprint($val);
+//	    if ($val==$mode_id) {
+//    	    $command['VALUE']=$data['z3k_config']['heating_modes'][0]['name'];
+//}
+//            $commands[]=$command;
+//          }
+//}
+
+        if ($has['has_multiple_thermometers'] && is_array($data['thermometers'])) {
+            foreach($data['thermometers'] as $term) {
+                $command=array();
+                $serial=str_replace('%','',$term['serial']);
+                $command['SYSTEM']=$serial.'_value';
+                $command['TITLE']=$term['name'].', T';
+                $command['VALUE']=$term['last_value'];
+                $command['VALUE_TYPE']='temperature';
+                if ($term['last_value_time']!='') {
+                    $command['UPDATED']=date('Y-m-d H:i:s',$term['last_value_time']);
+                }
+                $commands[]=$command;
+            }
         }
 
         if ($has['has_gtw_reports']) {
@@ -439,20 +598,7 @@ class zontdevices extends module
 
         }
 
-        if ($has['has_multiple_thermometers'] && is_array($data['thermometers'])) {
-            foreach($data['thermometers'] as $term) {
-                $command=array();
-                $serial=str_replace('%','',$term['serial']);
-                $command['SYSTEM']=$serial.'_value';
-                $command['TITLE']=$term['name'].', T';
-                $command['VALUE']=$term['last_value'];
-                $command['VALUE_TYPE']='temperature';
-                if ($term['last_value_time']!='') {
-                    $command['UPDATED']=date('Y-m-d H:i:s',$term['last_value_time']);
-                }
-                $commands[]=$command;
-            }
-        }
+
         if ($has['has_thermostat']) {
             if (isset($data['thermostat_mode'])) {
                 $command=array();
@@ -579,23 +725,22 @@ class zontdevices extends module
         }
     }
 
+//Изменение температуры контура (Применение значение через API)
     function writeDeviceCommand($device_rec, $command_rec, $value)
     {
         $command = $this->device_types[$device_rec['DEVICE_TYPE']]['commands'][$command_rec['SYSTEM']];
         if ($command['CANSET']) {
             $data=array();
             $data['device_id']=$device_rec['SERIAL_ID'];
-            if ($command_rec['SYSTEM']=='gtw_mode') {
-                $data[$command_rec['SYSTEM']]['current']=$value;
-                $data[$command_rec['SYSTEM']]['old']=$value;
-            } else {
-                $data[$command_rec['SYSTEM']]=$value;
-            }
-            //dprint($data);
-            $result = $this->requestZontAPI('/api/update_device',$data);
-            //dprint($result);
-        }
+	    $data['command_name']='TargetTemperature';
+	    $data['object_id']=(int)$command_rec['SYSTEM'];
+	    $data['command_args']=array('value' => (int)$value);
+	    $data['is_guaranteed']=true;
+//            var_dump($data);
+            $result = $this->writeZontAPI('/api/send_z3k_command', $data);
+//    	    dprint($result);
     }
+}
 
 
     function processCycle()

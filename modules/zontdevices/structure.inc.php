@@ -62,6 +62,23 @@ $this->device_types = array(
 
             )
     ),
+
+
+    'H2000+' => array (
+        'TITLE'=> 'ZONT H-2000+',
+        'manual' => '',
+        'commands' =>array(
+                '8234'=>array(
+                    'CANSET'=>1,
+                ),
+                '8264'=>array(
+                    'CANSET'=>1,
+                ),
+                '8294'=>array(
+                    'CANSET'=>1,
+                ),
+            )
+    ),
 );
 
 foreach($this->device_types as $k=>$v) {
