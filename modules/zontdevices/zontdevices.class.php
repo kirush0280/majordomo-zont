@@ -395,6 +395,7 @@ class zontdevices extends module
         foreach($data['capabilities'] as $feature) {
             $has[$feature]=1;
         }
+
 //@kirush
 //Общая информация об устройстве
         if ($has['has_z3k_settings'] && is_array($data['z3k_config']['device'])) {
@@ -426,22 +427,10 @@ class zontdevices extends module
                 $command['VALUE']=$data['io']['z3k-state'][$id]['curr_temp'];
                 $command['VALUE_TYPE']='temperature';
                 $commands[]=$command;
+
             }
         }
 
-// Контуры отопления
-        if ($has['has_z3k_settings'] && is_array($data['z3k_config']['heating_circuits'])) {
-            foreach($data['z3k_config']['heating_circuits'] as $heating_circ) {
-	        $command=array();
-                $id=$heating_circ['id'];
-		$command['SYSTEM']=$heating_circ['id'];
-		$command['TITLE']="Целевая t ".$heating_circ['name'];
-                $command['VALUE']=$data['io']['z3k-state'][$id]['target_temp'];
-                $command['VALUE_TYPE']='temperature';
-                $commands[]=$command;
-            }
-        }
-	
 // Насосы
         if ($has['has_z3k_settings'] && is_array($data['z3k_config']['pumps'])) {
             foreach($data['z3k_config']['pumps'] as $pumps) {
@@ -467,18 +456,36 @@ class zontdevices extends module
 	    }
         }
     }
+//  Контуры отопления
+	    if (isset($data['z3k_config']['heating_circuits'])) {	
+	        $total_circuits=count($data['z3k_config']['heating_circuits']);
+		$command=array();
+	    for($im=0;$im<$total_circuits;$im++) {
+                $command['SYSTEM']='heating_circuits_'.$im;
+                $id=$data['z3k_config']['heating_circuits'][$im]['id'];
+		$command['TITLE']='Контур: '.$data['z3k_config']['heating_circuits'][$im]['name'];
+                $command['VALUE']=$data['io']['z3k-state'][$id]['target_temp'];
+                $command['VALUE_TYPE']='temperature';
+		$id_mod=$data['io']['z3k-state'][$id]['mode_id'];
+		$commands[]=$command;
 
-// Режимы работы
-//        if ($has['has_z3k_settings'] && is_array($data['z3k_config']['heating_modes'])) {
-//            foreach($data['z3k_config']['heating_modes'] as $h_modes) {
-//	        $command=array();
-//                $id=$h_modes['id'];
-//		$command['SYSTEM']='Режим работы';
-//		$command['TITLE']=$h_modes['name'];
-//		$command['VALUE']=$data['io']['z3k-state'][$id]['heating_circuit']; 
-//                $commands[]=$command;
-//        }
-//    }
+	}
+    }	
+	    
+
+//  Режимы отопления
+//	    if (isset($data['z3k_config']['heating_modes'])) {	
+//	        $total_heating_modes=count($data['z3k_config']['heating_modes']);
+//		$command=array();
+//	    for($im=0;$im<$total_heating_modes;$im++) {
+//                $command['SYSTEM']='heating_modes_'.$im;
+//                $id=$data['z3k_config']['heating_modes'][$im]['id'];
+//		$command['TITLE']='Режим: '.$data['z3k_config']['heating_modes'][$im]['name'];
+//                $command['VALUE']=$data['z3k_config']['heating_modes'][$im]['id'];
+//                $command['COMMENTS'].=$im.' = '.$data['z3k_config']['heating_modes'][$im]['name'].';';
+//		$commands[]=$command;
+//	}
+//    }	
 
 // Идентификатор режима отопления ручной или какой либо режим, если 0 то ручной.  
 //        if ($has['has_z3k_settings'] && is_array($data['z3k_config']['heating_circuits'])) {
@@ -517,7 +524,6 @@ class zontdevices extends module
                 $commands[]=$command;
             }
         }
-
         if ($has['has_gtw_reports']) {
             if (isset($data['gtw_t_air_int_sensor'])) {
                 $command=array();
@@ -598,7 +604,6 @@ class zontdevices extends module
 
         }
 
-
         if ($has['has_thermostat']) {
             if (isset($data['thermostat_mode'])) {
                 $command=array();
@@ -606,6 +611,7 @@ class zontdevices extends module
                 $command['VALUE']=$data['thermostat_mode'];
                 $commands[]=$command;
             }
+
             if (isset($data['thermostat_ext_mode'])) {
                 $command=array();
                 $command['SYSTEM']='thermostat_ext_mode';

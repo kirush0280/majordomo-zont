@@ -68,13 +68,34 @@ $this->device_types = array(
         'TITLE'=> 'ZONT H-2000+',
         'manual' => '',
         'commands' =>array(
-                '8234'=>array(
+                'heating_circuits_0'=>array(
+                'CANSET'=>1,
+                ),
+                'heating_circuits_1'=>array(
                     'CANSET'=>1,
                 ),
-                '8264'=>array(
+                'heating_circuits_2'=>array(
                     'CANSET'=>1,
                 ),
-                '8294'=>array(
+                'heating_circuits_3'=>array(
+                    'CANSET'=>1,
+                ),
+                'heating_circuits_4'=>array(
+                    'CANSET'=>1,
+                ),
+                'heating_circuits_5'=>array(
+                    'CANSET'=>1,
+                ),
+                'heating_circuits_6'=>array(
+                    'CANSET'=>1,
+                ),
+                'heating_circuits_7'=>array(
+                    'CANSET'=>1,
+                ),
+                'heating_circuits_8'=>array(
+                    'CANSET'=>1,
+                ),
+                'heating_circuits_9'=>array(
                     'CANSET'=>1,
                 ),
             )
